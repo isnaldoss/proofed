@@ -28,12 +28,12 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
         <div className="flex-1">
           {children}
         </div>
-        <footer className=" text-center text-xs sm:text-sm text-muted-foreground bg-background">
+        <footer className="py-4 text-center text-xs sm:text-sm text-muted-foreground bg-background">
           Desenvolvido pela <a href="https://barondesk.com.br" target="_blank" rel="noopener noreferrer" className="font-medium hover:text-foreground transition-colors">Barondesk</a>
         </footer>
       </body>

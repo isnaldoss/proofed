@@ -12,23 +12,23 @@ export default async function Dashboard() {
   const projects = await getProjects();
 
   return (
-    <div className="min-h-screen bg-background p-8 font-sans">
-      <header className="mb-12 flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Proofed</h1>
+    <div className="bg-background p-4 sm:p-8 font-sans">
+      <header className="mb-8 sm:mb-12 flex items-center justify-between">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Proofed</h1>
       </header>
 
       <main className="mx-auto max-w-5xl">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 sm:mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold">Seus Projetos</h2>
           
-          <form action={createProject} className="flex gap-2">
+          <form action={createProject} className="flex flex-col gap-2 sm:flex-row sm:gap-2">
             <Input 
               name="title" 
               placeholder="Novo Projeto..." 
-              className="w-64"
+              className="w-full sm:w-64"
               required
             />
-            <Button type="submit" className="cursor-pointer">
+            <Button type="submit" className="cursor-pointer w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               Criar
             </Button>
@@ -36,7 +36,7 @@ export default async function Dashboard() {
         </div>
 
         {projects.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+          <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground">
             <Folder className="mb-4 h-10 w-10 opacity-20" />
             <p>Nenhum projeto criado ainda.</p>
           </div>
