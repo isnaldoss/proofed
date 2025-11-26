@@ -28,7 +28,7 @@ export default async function Dashboard() {
               className="w-64"
               required
             />
-            <Button type="submit">
+            <Button type="submit" className="cursor-pointer">
               <Plus className="mr-2 h-4 w-4" />
               Criar
             </Button>

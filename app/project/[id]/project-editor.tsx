@@ -127,9 +127,65 @@ export default function ProjectEditor({ project }: { project: Project }) {
     alert('Link copiado!')
   }
 
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  // ... existing sensors ...
+
+  // ... existing handleDragEnd ...
+
+  // ... existing handleUpload ...
+
+  // New Drag and Drop handlers
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    
+    if (!e.dataTransfer.files?.length) return
+
+    const files = Array.from(e.dataTransfer.files)
+    setUploadStatus('Iniciando upload...')
+    
+    startTransition(async () => {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadStatus(`Enviando ${i + 1} de ${files.length}...`)
+        
+        const formData = new FormData()
+        formData.append('files', file)
+        try {
+          await uploadMedia(project.id, formData)
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error)
+          alert(`Erro ao enviar ${file.name}. Verifique se o arquivo é menor que 4.5MB.`)
+        }
+      }
+      setUploadStatus('Finalizando...')
+      window.location.reload() 
+    })
+  }
+
+  // ... existing copyLink ...
+
   async function handleDelete() {
     if (confirm('Tem certeza que deseja excluir este projeto?')) {
-      await deleteProject(project.id)
+      setIsDeleting(true)
+      try {
+        await deleteProject(project.id)
+      } catch (error) {
+        setIsDeleting(false)
+        alert('Erro ao excluir projeto')
+      }
     }
   }
 
@@ -137,7 +193,7 @@ export default function ProjectEditor({ project }: { project: Project }) {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
+          <Button variant="ghost" size="icon" asChild className="cursor-pointer">
             <Link href="/">
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -145,14 +201,20 @@ export default function ProjectEditor({ project }: { project: Project }) {
           <h1 className="text-2xl font-bold">{project.title}</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="destructive" size="icon" onClick={handleDelete}>
-            <Trash2 className="h-4 w-4" />
+          <Button 
+            variant="destructive" 
+            size="icon" 
+            onClick={handleDelete} 
+            disabled={isDeleting}
+            className="cursor-pointer"
+          >
+            {isDeleting ? <span className="animate-spin">⏳</span> : <Trash2 className="h-4 w-4" />}
           </Button>
-          <Button variant="outline" onClick={copyLink}>
+          <Button variant="outline" onClick={copyLink} className="cursor-pointer">
             <LinkIcon className="mr-2 h-4 w-4" />
             Copiar Link
           </Button>
-          <Button variant="default" asChild>
+          <Button variant="default" asChild className="cursor-pointer">
             <a href={`/p/${project.id}`} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="mr-2 h-4 w-4" />
               Visualizar
@@ -162,7 +224,14 @@ export default function ProjectEditor({ project }: { project: Project }) {
       </div>
 
       <Card className="p-8">
-        <div className="flex flex-col items-center justify-center gap-4 border-2 border-dashed py-12 text-center text-muted-foreground">
+        <div 
+          className={`flex flex-col items-center justify-center gap-4 border-2 border-dashed py-12 text-center text-muted-foreground transition-colors ${
+            isDragging ? 'border-primary bg-primary/10' : 'border-muted-foreground/25'
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <div className="rounded-full bg-muted p-4">
             <Upload className="h-8 w-8" />
           </div>
@@ -179,7 +248,7 @@ export default function ProjectEditor({ project }: { project: Project }) {
             onChange={handleUpload}
             disabled={isPending || !!uploadStatus}
           />
-          <Button asChild disabled={isPending || !!uploadStatus} className={uploadStatus ? "opacity-50 cursor-not-allowed" : ""}>
+          <Button asChild disabled={isPending || !!uploadStatus} className={uploadStatus ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}>
             <label htmlFor="file-upload" className={uploadStatus ? "cursor-not-allowed" : "cursor-pointer"}>
               {uploadStatus ? (
                 <span className="flex items-center gap-2">

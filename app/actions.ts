@@ -220,11 +220,11 @@ export async function deleteProject(projectId: string) {
     }
 
     await ProjectModel.findByIdAndDelete(projectId);
-
-    revalidatePath("/");
-    redirect("/");
   } catch (error) {
     console.error("Error deleting project:", error);
     throw error;
   }
+
+  revalidatePath("/");
+  redirect("/");
 }
