@@ -1,17 +1,14 @@
 'use server'
 
-import fs from 'fs/promises'
-import path from 'path'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-
-const DB_PATH = path.join(process.cwd(), 'data', 'db.json')
+import cloudinary from '@/lib/cloudinary'
+import { db } from '@/lib/db'
 
 export type Project = {
   id: string
   title: string
-  createdAt: string
-  media: MediaItem[]
+  created_at: string
 }
 
 export type MediaItem = {
@@ -19,6 +16,7 @@ export type MediaItem = {
   url: string
   type: 'image' | 'video'
   comments: Comment[]
+  position: number
 }
 
 export type Comment = {
@@ -27,85 +25,110 @@ export type Comment = {
   y: number
   text: string
   author?: string
-  createdAt: string
-}
-
-async function getDb() {
-  try {
-    const data = await fs.readFile(DB_PATH, 'utf-8')
-    return JSON.parse(data) as { projects: Project[] }
-  } catch (error) {
-    return { projects: [] }
-  }
-}
-
-async function saveDb(data: { projects: Project[] }) {
-  await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2))
+  created_at: string
 }
 
 export async function getProjects() {
-  const db = await getDb()
-  return db.projects.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const result = await db`
+    SELECT id, title, created_at
+    FROM projects
+    ORDER BY created_at DESC
+  `
+  return result.rows as Project[]
 }
 
 export async function createProject(formData: FormData) {
   const title = formData.get('title') as string
   if (!title) return
 
-  const db = await getDb()
-  const newProject: Project = {
-    id: crypto.randomUUID(),
-    title,
-    createdAt: new Date().toISOString(),
-    media: []
-  }
-
-  db.projects.push(newProject)
-  await saveDb(db)
+  const result = await db`
+    INSERT INTO projects (title)
+    VALUES (${title})
+    RETURNING id
+  `
+  
+  const projectId = result.rows[0].id
   
   revalidatePath('/')
-  redirect(`/project/${newProject.id}`)
+  redirect(`/project/${projectId}`)
 }
 
 export async function getProject(id: string) {
-  const db = await getDb()
-  return db.projects.find((p) => p.id === id)
+  const projectResult = await db`
+    SELECT id, title, created_at
+    FROM projects
+    WHERE id = ${id}
+  `
+  
+  if (projectResult.rows.length === 0) return null
+  
+  const project = projectResult.rows[0] as Project
+  
+  // Get media with comments
+  const mediaResult = await db`
+    SELECT 
+      m.id, m.url, m.type, m.position,
+      json_agg(
+        json_build_object(
+          'id', c.id,
+          'x', c.x,
+          'y', c.y,
+          'text', c.text,
+          'author', c.author,
+          'created_at', c.created_at
+        ) ORDER BY c.created_at
+      ) FILTER (WHERE c.id IS NOT NULL) as comments
+    FROM media m
+    LEFT JOIN comments c ON c.media_id = m.id
+    WHERE m.project_id = ${id}
+    GROUP BY m.id, m.url, m.type, m.position
+    ORDER BY m.position
+  `
+  
+  return {
+    ...project,
+    media: mediaResult.rows.map(row => ({
+      ...row,
+      comments: row.comments || []
+    })) as MediaItem[]
+  }
 }
 
 export async function uploadMedia(projectId: string, formData: FormData) {
   try {
     const files = formData.getAll('files') as File[]
-    const db = await getDb()
-    const project = db.projects.find((p) => p.id === projectId)
     
-    if (!project) return
-
     for (const file of files) {
       const buffer = Buffer.from(await file.arrayBuffer())
-      const ext = path.extname(file.name)
-      const filename = `${crypto.randomUUID()}${ext}`
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads', projectId)
+      const base64 = buffer.toString('base64')
+      const dataURI = `data:${file.type};base64,${base64}`
       
-      // Ensure directory exists
-      try {
-        await fs.access(uploadDir)
-      } catch {
-        await fs.mkdir(uploadDir, { recursive: true })
-      }
-
-      await fs.writeFile(path.join(uploadDir, filename), buffer)
-
-      const mediaItem: MediaItem = {
-        id: crypto.randomUUID(),
-        url: `/uploads/${projectId}/${filename}`,
-        type: file.type.startsWith('video') ? 'video' : 'image',
-        comments: []
-      }
+      // Upload to Cloudinary
+      const result = await cloudinary.uploader.upload(dataURI, {
+        folder: `proofed/${projectId}`,
+        resource_type: file.type.startsWith('video') ? 'video' : 'image',
+      })
       
-      project.media.push(mediaItem)
+      // Get current max position
+      const positionResult = await db`
+        SELECT COALESCE(MAX(position), -1) + 1 as next_position
+        FROM media
+        WHERE project_id = ${projectId}
+      `
+      const nextPosition = positionResult.rows[0].next_position
+      
+      // Save to database
+      await db`
+        INSERT INTO media (project_id, url, type, position)
+        VALUES (
+          ${projectId},
+          ${result.secure_url},
+          ${file.type.startsWith('video') ? 'video' : 'image'},
+          ${nextPosition}
+        )
+      `
     }
 
-    await saveDb(db)
     revalidatePath(`/project/${projectId}`)
     revalidatePath(`/p/${projectId}`)
   } catch (error) {
@@ -115,53 +138,65 @@ export async function uploadMedia(projectId: string, formData: FormData) {
 }
 
 export async function updateProjectMedia(projectId: string, media: MediaItem[]) {
-  const db = await getDb()
-  const project = db.projects.find((p) => p.id === projectId)
-  
-  if (!project) return
-
-  await saveDb(db)
-  revalidatePath(`/project/${projectId}`)
-  revalidatePath(`/p/${projectId}`)
+  try {
+    // Update positions
+    for (let i = 0; i < media.length; i++) {
+      await db`
+        UPDATE media
+        SET position = ${i}
+        WHERE id = ${media[i].id}
+      `
+    }
+    
+    revalidatePath(`/project/${projectId}`)
+    revalidatePath(`/p/${projectId}`)
+  } catch (error) {
+    console.error('Error updating media:', error)
+  }
 }
 
-export async function addComment(projectId: string, mediaId: string, comment: Omit<Comment, 'id' | 'createdAt'>) {
-  const db = await getDb()
-  const project = db.projects.find((p) => p.id === projectId)
+export async function addComment(projectId: string, mediaId: string, comment: Omit<Comment, 'id' | 'created_at'>) {
+  await db`
+    INSERT INTO comments (media_id, x, y, text, author)
+    VALUES (
+      ${mediaId},
+      ${comment.x},
+      ${comment.y},
+      ${comment.text},
+      ${comment.author || 'Anônimo'}
+    )
+  `
   
-  if (!project) return
-
-  const mediaItem = project.media.find((m) => m.id === mediaId)
-  if (!mediaItem) return
-
-  const newComment: Comment = {
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    ...comment
-  }
-
-  mediaItem.comments.push(newComment)
-  await saveDb(db)
   revalidatePath(`/p/${projectId}`)
   revalidatePath(`/project/${projectId}`)
 }
 
 export async function deleteProject(projectId: string) {
-  const db = await getDb()
-  const project = db.projects.find((p) => p.id === projectId)
-
-  if (project) {
-    // Delete project folder
-    try {
-      const projectDir = path.join(process.cwd(), 'public', 'uploads', projectId)
-      await fs.rm(projectDir, { recursive: true, force: true })
-    } catch (error) {
-      console.error(`Failed to delete project directory: ${projectId}`, error)
+  try {
+    // Get all media URLs to delete from Cloudinary
+    const mediaResult = await db`
+      SELECT url FROM media WHERE project_id = ${projectId}
+    `
+    
+    // Delete from Cloudinary
+    for (const row of mediaResult.rows) {
+      const publicId = row.url.split('/').slice(-2).join('/').split('.')[0]
+      try {
+        await cloudinary.uploader.destroy(`proofed/${publicId}`)
+      } catch (error) {
+        console.error(`Failed to delete from Cloudinary: ${publicId}`, error)
+      }
     }
+    
+    // Delete from database (cascade will handle media and comments)
+    await db`
+      DELETE FROM projects WHERE id = ${projectId}
+    `
+    
+    revalidatePath('/')
+    redirect('/')
+  } catch (error) {
+    console.error('Error deleting project:', error)
+    throw error
   }
-
-  db.projects = db.projects.filter((p) => p.id !== projectId)
-  await saveDb(db)
-  revalidatePath('/')
-  redirect('/')
 }
