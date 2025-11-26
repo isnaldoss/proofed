@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import cloudinary from '@/lib/cloudinary'
-import { db } from '@/lib/db'
+import connectDB, { Project as ProjectModel } from '@/lib/db'
 
 export type Project = {
   id: string
@@ -30,89 +30,80 @@ export type Comment = {
 }
 
 export async function getProjects() {
-  const result = await db`
-    SELECT 
-      p.id, 
-      p.title, 
-      p.created_at,
-      COALESCE(json_agg(
-        json_build_object(
-          'id', m.id,
-          'url', m.url,
-          'type', m.type,
-          'position', m.position,
-          'comments', '[]'::json
-        ) ORDER BY m.position
-      ) FILTER (WHERE m.id IS NOT NULL), '[]'::json) as media
-    FROM projects p
-    LEFT JOIN media m ON m.project_id = p.id
-    GROUP BY p.id, p.title, p.created_at
-    ORDER BY p.created_at DESC
-  `
-  return result.rows as Project[]
+  await connectDB()
+  const projects = await ProjectModel.find().sort({ created_at: -1 }).lean()
+  
+  return projects.map((p: any) => ({
+    id: p._id.toString(),
+    title: p.title,
+    created_at: p.created_at.toISOString(),
+    media: (p.media || []).map((m: any) => ({
+      id: m._id.toString(),
+      url: m.url,
+      type: m.type,
+      position: m.position,
+      comments: (m.comments || []).map((c: any) => ({
+        id: c._id.toString(),
+        x: c.x,
+        y: c.y,
+        text: c.text,
+        author: c.author,
+        created_at: c.created_at.toISOString()
+      }))
+    }))
+  })) as Project[]
 }
 
 export async function createProject(formData: FormData) {
   const title = formData.get('title') as string
   if (!title) return
 
-  const result = await db`
-    INSERT INTO projects (title)
-    VALUES (${title})
-    RETURNING id
-  `
-  
-  const projectId = result.rows[0].id
+  await connectDB()
+  const project = await ProjectModel.create({ title })
   
   revalidatePath('/')
-  redirect(`/project/${projectId}`)
+  redirect(`/project/${project._id.toString()}`)
 }
 
 export async function getProject(id: string) {
-  const projectResult = await db`
-    SELECT id, title, created_at
-    FROM projects
-    WHERE id = ${id}
-  `
+  await connectDB()
   
-  if (projectResult.rows.length === 0) return null
-  
-  const project = projectResult.rows[0] as Project
-  
-  // Get media with comments
-  const mediaResult = await db`
-    SELECT 
-      m.id, m.url, m.type, m.position,
-      json_agg(
-        json_build_object(
-          'id', c.id,
-          'x', c.x,
-          'y', c.y,
-          'text', c.text,
-          'author', c.author,
-          'created_at', c.created_at
-        ) ORDER BY c.created_at
-      ) FILTER (WHERE c.id IS NOT NULL) as comments
-    FROM media m
-    LEFT JOIN comments c ON c.media_id = m.id
-    WHERE m.project_id = ${id}
-    GROUP BY m.id, m.url, m.type, m.position
-    ORDER BY m.position
-  `
-  
-  return {
-    ...project,
-    media: mediaResult.rows.map(row => ({
-      ...row,
-      comments: row.comments || []
-    })) as MediaItem[]
+  try {
+    const project = await ProjectModel.findById(id).lean()
+    if (!project) return null
+
+    return {
+      id: project._id.toString(),
+      title: project.title,
+      created_at: project.created_at.toISOString(),
+      media: (project.media || []).sort((a: any, b: any) => a.position - b.position).map((m: any) => ({
+        id: m._id.toString(),
+        url: m.url,
+        type: m.type,
+        position: m.position,
+        comments: (m.comments || []).map((c: any) => ({
+          id: c._id.toString(),
+          x: c.x,
+          y: c.y,
+          text: c.text,
+          author: c.author,
+          created_at: c.created_at.toISOString()
+        }))
+      }))
+    } as Project
+  } catch (error) {
+    return null
   }
 }
 
 export async function uploadMedia(projectId: string, formData: FormData) {
   try {
     const files = formData.getAll('files') as File[]
+    await connectDB()
     
+    const project = await ProjectModel.findById(projectId)
+    if (!project) return
+
     for (const file of files) {
       const buffer = Buffer.from(await file.arrayBuffer())
       const base64 = buffer.toString('base64')
@@ -124,25 +115,20 @@ export async function uploadMedia(projectId: string, formData: FormData) {
         resource_type: file.type.startsWith('video') ? 'video' : 'image',
       })
       
-      // Get current max position
-      const positionResult = await db`
-        SELECT COALESCE(MAX(position), -1) + 1 as next_position
-        FROM media
-        WHERE project_id = ${projectId}
-      `
-      const nextPosition = positionResult.rows[0].next_position
-      
-      // Save to database
-      await db`
-        INSERT INTO media (project_id, url, type, position)
-        VALUES (
-          ${projectId},
-          ${result.secure_url},
-          ${file.type.startsWith('video') ? 'video' : 'image'},
-          ${nextPosition}
-        )
-      `
+      // Get next position
+      const nextPosition = project.media.length > 0 
+        ? Math.max(...project.media.map((m: any) => m.position)) + 1 
+        : 0
+
+      project.media.push({
+        url: result.secure_url,
+        type: file.type.startsWith('video') ? 'video' : 'image',
+        position: nextPosition,
+        comments: []
+      })
     }
+
+    await project.save()
 
     revalidatePath(`/project/${projectId}`)
     revalidatePath(`/p/${projectId}`)
@@ -154,14 +140,19 @@ export async function uploadMedia(projectId: string, formData: FormData) {
 
 export async function updateProjectMedia(projectId: string, media: MediaItem[]) {
   try {
-    // Update positions
-    for (let i = 0; i < media.length; i++) {
-      await db`
-        UPDATE media
-        SET position = ${i}
-        WHERE id = ${media[i].id}
-      `
-    }
+    await connectDB()
+    const project = await ProjectModel.findById(projectId)
+    if (!project) return
+
+    // Update positions based on the order in the array
+    media.forEach((item, index) => {
+      const mediaItem = project.media.id(item.id)
+      if (mediaItem) {
+        mediaItem.position = index
+      }
+    })
+
+    await project.save()
     
     revalidatePath(`/project/${projectId}`)
     revalidatePath(`/p/${projectId}`)
@@ -171,16 +162,20 @@ export async function updateProjectMedia(projectId: string, media: MediaItem[]) 
 }
 
 export async function addComment(projectId: string, mediaId: string, comment: Omit<Comment, 'id' | 'created_at'>) {
-  await db`
-    INSERT INTO comments (media_id, x, y, text, author)
-    VALUES (
-      ${mediaId},
-      ${comment.x},
-      ${comment.y},
-      ${comment.text},
-      ${comment.author || 'Anônimo'}
-    )
-  `
+  await connectDB()
+  const project = await ProjectModel.findById(projectId)
+  if (!project) return
+
+  const mediaItem = project.media.id(mediaId)
+  if (mediaItem) {
+    mediaItem.comments.push({
+      x: comment.x,
+      y: comment.y,
+      text: comment.text,
+      author: comment.author || 'Anônimo'
+    })
+    await project.save()
+  }
   
   revalidatePath(`/p/${projectId}`)
   revalidatePath(`/project/${projectId}`)
@@ -188,14 +183,13 @@ export async function addComment(projectId: string, mediaId: string, comment: Om
 
 export async function deleteProject(projectId: string) {
   try {
-    // Get all media URLs to delete from Cloudinary
-    const mediaResult = await db`
-      SELECT url FROM media WHERE project_id = ${projectId}
-    `
-    
+    await connectDB()
+    const project = await ProjectModel.findById(projectId)
+    if (!project) return
+
     // Delete from Cloudinary
-    for (const row of mediaResult.rows) {
-      const publicId = row.url.split('/').slice(-2).join('/').split('.')[0]
+    for (const item of project.media) {
+      const publicId = item.url.split('/').slice(-2).join('/').split('.')[0]
       try {
         await cloudinary.uploader.destroy(`proofed/${publicId}`)
       } catch (error) {
@@ -203,10 +197,7 @@ export async function deleteProject(projectId: string) {
       }
     }
     
-    // Delete from database (cascade will handle media and comments)
-    await db`
-      DELETE FROM projects WHERE id = ${projectId}
-    `
+    await ProjectModel.findByIdAndDelete(projectId)
     
     revalidatePath('/')
     redirect('/')

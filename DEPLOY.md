@@ -1,4 +1,4 @@
-# Proofed - Deploy Guide
+# Proofed - Deploy Guide (MongoDB Version)
 
 ## Pré-requisitos
 
@@ -11,7 +11,17 @@
    - **API Key**
    - **API Secret**
 
-### 2. Vercel
+### 2. MongoDB Atlas
+
+1. Acesse https://www.mongodb.com/cloud/atlas/register
+2. Crie uma conta gratuita
+3. Crie um Cluster (Shared / Free)
+4. Em "Database Access", crie um usuário e senha
+5. Em "Network Access", permita acesso de qualquer IP (0.0.0.0/0)
+6. Clique em "Connect" → "Drivers" e copie a **Connection String**
+   - Substitua `<password>` pela sua senha
+
+### 3. Vercel
 
 1. Acesse https://vercel.com/signup
 2. Faça login com GitHub
@@ -23,7 +33,7 @@
 
 ```bash
 git add .
-git commit -m "Migração para Cloudinary + Vercel Postgres"
+git commit -m "Migração para Cloudinary + MongoDB"
 git push
 ```
 
@@ -41,30 +51,12 @@ Na tela de configuração, adicione:
 NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=seu_cloud_name
 CLOUDINARY_API_KEY=sua_api_key
 CLOUDINARY_API_SECRET=seu_api_secret
+MONGODB_URI=sua_connection_string_do_mongo
 ```
 
-### Passo 4: Adicionar Vercel Postgres
+### Passo 4: Deploy
 
-1. Após o deploy inicial, vá no projeto na Vercel
-2. Clique em "Storage" → "Create Database"
-3. Selecione "Postgres"
-4. Clique em "Continue" → "Create"
-5. A Vercel vai adicionar automaticamente as variáveis de ambiente do banco
-
-### Passo 5: Executar Schema SQL
-
-1. No Vercel Dashboard, vá em "Storage" → Seu banco Postgres
-2. Clique em "Query"
-3. Cole o conteúdo do arquivo `schema.sql`
-4. Clique em "Run Query"
-
-### Passo 6: Redeploy
-
-1. Vá em "Deployments"
-2. Clique nos 3 pontinhos do último deploy
-3. Clique em "Redeploy"
-
-Pronto! Seu Proofed está no ar! 🎉
+Clique em "Deploy". O projeto deve subir sem erros!
 
 ## Desenvolvimento Local
 
@@ -74,14 +66,9 @@ Pronto! Seu Proofed está no ar! 🎉
 cp .env.example .env.local
 ```
 
-2. Preencha as variáveis do Cloudinary
+2. Preencha as variáveis do Cloudinary e MongoDB
 
-3. Para o banco local, você pode:
-
-   - Usar o banco da Vercel (copie as variáveis do dashboard)
-   - Ou instalar Postgres localmente
-
-4. Execute:
+3. Execute:
 
 ```bash
 npm run dev
@@ -89,8 +76,8 @@ npm run dev
 
 ## Custos
 
-- ✅ **Cloudinary**: Grátis até 25GB de storage e 25GB de bandwidth/mês
-- ✅ **Vercel**: Grátis para projetos pessoais
-- ✅ **Vercel Postgres**: Grátis até 256MB de storage
+- ✅ **Cloudinary**: Grátis até 25GB
+- ✅ **MongoDB Atlas**: Grátis (512MB)
+- ✅ **Vercel**: Grátis
 
 **Total: R$ 0,00/mês** 🎉

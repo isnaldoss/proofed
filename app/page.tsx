@@ -4,14 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import Link from "next/link";
 import { Plus, Folder } from "lucide-react";
-import { initDatabase } from "@/lib/init-db";
 
 // Force dynamic rendering (no pre-render at build time)
 export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
-  // Initialize database on first load
-  await initDatabase();
   const projects = await getProjects();
 
   return (
