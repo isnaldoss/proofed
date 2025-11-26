@@ -97,13 +97,20 @@ export default function ProjectEditor({ project }: { project: Project }) {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.files?.length) return
     
-    const formData = new FormData()
-    Array.from(e.target.files).forEach((file) => {
-      formData.append('files', file)
-    })
-
+    const files = Array.from(e.target.files)
+    
     startTransition(async () => {
-      await uploadMedia(project.id, formData)
+      // Upload files one by one to avoid hitting Vercel's 4.5MB request body limit
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append('files', file)
+        try {
+          await uploadMedia(project.id, formData)
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error)
+          alert(`Erro ao enviar ${file.name}. Verifique se o arquivo é menor que 4.5MB.`)
+        }
+      }
       window.location.reload() 
     })
   }
