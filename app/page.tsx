@@ -4,8 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import Link from "next/link";
 import { Plus, Folder } from "lucide-react";
+import { initDatabase } from "@/lib/init-db";
 
 export default async function Dashboard() {
+  // Initialize database on first load
+  await initDatabase();
+  
   const projects = await getProjects();
 
   return (
