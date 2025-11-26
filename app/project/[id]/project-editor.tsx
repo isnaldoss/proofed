@@ -63,6 +63,7 @@ function SortableMediaItem({ item }: { item: MediaItem }) {
 export default function ProjectEditor({ project }: { project: Project }) {
   const [media, setMedia] = useState(project.media)
   const [isPending, startTransition] = useTransition()
+  const [uploadStatus, setUploadStatus] = useState('')
   
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -98,10 +99,14 @@ export default function ProjectEditor({ project }: { project: Project }) {
     if (!e.target.files?.length) return
     
     const files = Array.from(e.target.files)
+    setUploadStatus('Iniciando upload...')
     
     startTransition(async () => {
       // Upload files one by one to avoid hitting Vercel's 4.5MB request body limit
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadStatus(`Enviando ${i + 1} de ${files.length}...`)
+        
         const formData = new FormData()
         formData.append('files', file)
         try {
@@ -111,6 +116,7 @@ export default function ProjectEditor({ project }: { project: Project }) {
           alert(`Erro ao enviar ${file.name}. Verifique se o arquivo é menor que 4.5MB.`)
         }
       }
+      setUploadStatus('Finalizando...')
       window.location.reload() 
     })
   }
@@ -171,14 +177,19 @@ export default function ProjectEditor({ project }: { project: Project }) {
             className="hidden" 
             id="file-upload"
             onChange={handleUpload}
-            disabled={isPending}
+            disabled={isPending || !!uploadStatus}
           />
-          <Button asChild disabled={isPending}>
-            <label htmlFor="file-upload" className="cursor-pointer">
-              Selecionar Arquivos
+          <Button asChild disabled={isPending || !!uploadStatus} className={uploadStatus ? "opacity-50 cursor-not-allowed" : ""}>
+            <label htmlFor="file-upload" className={uploadStatus ? "cursor-not-allowed" : "cursor-pointer"}>
+              {uploadStatus ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin">⏳</span> {uploadStatus}
+                </span>
+              ) : (
+                "Selecionar Arquivos"
+              )}
             </label>
           </Button>
-          {isPending && <p className="text-sm animate-pulse">Enviando...</p>}
         </div>
       </Card>
 
