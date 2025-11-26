@@ -9,6 +9,7 @@ export type Project = {
   id: string
   title: string
   created_at: string
+  media: MediaItem[]
 }
 
 export type MediaItem = {
@@ -30,9 +31,23 @@ export type Comment = {
 
 export async function getProjects() {
   const result = await db`
-    SELECT id, title, created_at
-    FROM projects
-    ORDER BY created_at DESC
+    SELECT 
+      p.id, 
+      p.title, 
+      p.created_at,
+      COALESCE(json_agg(
+        json_build_object(
+          'id', m.id,
+          'url', m.url,
+          'type', m.type,
+          'position', m.position,
+          'comments', '[]'::json
+        ) ORDER BY m.position
+      ) FILTER (WHERE m.id IS NOT NULL), '[]'::json) as media
+    FROM projects p
+    LEFT JOIN media m ON m.project_id = p.id
+    GROUP BY p.id, p.title, p.created_at
+    ORDER BY p.created_at DESC
   `
   return result.rows as Project[]
 }

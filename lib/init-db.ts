@@ -1,6 +1,12 @@
 import { sql } from '@vercel/postgres';
 
 export async function initDatabase() {
+  // Skip during build time
+  if (!process.env.POSTGRES_URL) {
+    console.log('Skipping database initialization (no connection string)');
+    return;
+  }
+  
   try {
     // Check if tables already exist
     const result = await sql`

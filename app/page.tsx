@@ -7,10 +7,12 @@ import { Plus, Folder } from "lucide-react";
 import { initDatabase } from "@/lib/init-db";
 
 export default async function Dashboard() {
-  // Initialize database on first load
-  await initDatabase();
+  // Initialize database on first load (only in production/runtime)
+  if (process.env.POSTGRES_URL) {
+    await initDatabase();
+  }
   
-  const projects = await getProjects();
+  const projects = process.env.POSTGRES_URL ? await getProjects() : [];
 
   return (
     <div className="min-h-screen bg-background p-8 font-sans">
@@ -51,7 +53,7 @@ export default async function Dashboard() {
                       {project.title}
                     </CardTitle>
                     <CardDescription>
-                      {new Date(project.createdAt).toLocaleDateString('pt-BR')}
+                      {new Date(project.created_at).toLocaleDateString('pt-BR')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
