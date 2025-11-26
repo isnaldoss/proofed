@@ -6,13 +6,13 @@ import Link from "next/link";
 import { Plus, Folder } from "lucide-react";
 import { initDatabase } from "@/lib/init-db";
 
+// Force dynamic rendering (no pre-render at build time)
+export const dynamic = 'force-dynamic';
+
 export default async function Dashboard() {
-  // Initialize database on first load (only in production/runtime)
-  if (process.env.POSTGRES_URL) {
-    await initDatabase();
-  }
-  
-  const projects = process.env.POSTGRES_URL ? await getProjects() : [];
+  // Initialize database on first load
+  await initDatabase();
+  const projects = await getProjects();
 
   return (
     <div className="min-h-screen bg-background p-8 font-sans">
