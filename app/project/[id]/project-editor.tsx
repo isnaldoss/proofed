@@ -5,7 +5,7 @@ import { Project, MediaItem, uploadMedia, updateProjectMedia, deleteProject } fr
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Upload, Link as LinkIcon, ExternalLink, GripVertical, Trash2, ArrowLeft } from 'lucide-react'
+import { Upload, Link as LinkIcon, ExternalLink, GripVertical, Trash2, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import {
   DndContext,
@@ -208,7 +208,7 @@ export default function ProjectEditor({ project }: { project: Project }) {
             disabled={isDeleting}
             className="cursor-pointer"
           >
-            {isDeleting ? <span className="animate-spin">⏳</span> : <Trash2 className="h-4 w-4" />}
+            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </Button>
           <Button variant="outline" onClick={copyLink} className="cursor-pointer">
             <LinkIcon className="mr-2 h-4 w-4" />
@@ -252,7 +252,7 @@ export default function ProjectEditor({ project }: { project: Project }) {
             <label htmlFor="file-upload" className={uploadStatus ? "cursor-not-allowed" : "cursor-pointer"}>
               {uploadStatus ? (
                 <span className="flex items-center gap-2">
-                  <span className="animate-spin">⏳</span> {uploadStatus}
+                  <Loader2 className="h-4 w-4 animate-spin" /> {uploadStatus}
                 </span>
               ) : (
                 "Selecionar Arquivos"
