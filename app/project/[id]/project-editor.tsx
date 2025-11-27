@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Project, MediaItem, uploadMedia, updateProjectMedia, deleteProject, deleteMedia } from '@/app/actions'
+import { Project, MediaItem, uploadMedia, updateProjectMedia, deleteProject, deleteMedia, updateProjectTitle } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Upload, Link as LinkIcon, ExternalLink, GripVertical, Trash2, ArrowLeft, Loader2, X } from 'lucide-react'
+import { Upload, Link as LinkIcon, ExternalLink, GripVertical, Trash2, ArrowLeft, Loader2, X, Pencil, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -76,6 +76,9 @@ export default function ProjectEditor({ project }: { project: Project }) {
   const [uploadStatus, setUploadStatus] = useState('')
   const router = useRouter()
   
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [title, setTitle] = useState(project.title)
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -86,6 +89,23 @@ export default function ProjectEditor({ project }: { project: Project }) {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   )
+
+  async function handleTitleSave() {
+    if (title === project.title) {
+      setIsEditingTitle(false)
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        await updateProjectTitle(project.id, title)
+        setIsEditingTitle(false)
+        toast.success('Título atualizado!')
+      } catch (error) {
+        toast.error('Erro ao atualizar título')
+      }
+    })
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -246,7 +266,39 @@ export default function ProjectEditor({ project }: { project: Project }) {
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">{project.title}</h1>
+          
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2">
+              <Input 
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="h-9 text-lg font-bold w-[200px] sm:w-[300px]"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleTitleSave()
+                  if (e.key === 'Escape') {
+                    setTitle(project.title)
+                    setIsEditingTitle(false)
+                  }
+                }}
+              />
+              <Button size="icon" variant="ghost" onClick={handleTitleSave} disabled={isPending} className="h-9 w-9">
+                <Check className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group">
+              <h1 className="text-2xl font-bold">{title}</h1>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                onClick={() => setIsEditingTitle(true)}
+                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Pencil className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Button 

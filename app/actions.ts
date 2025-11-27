@@ -65,6 +65,19 @@ export async function createProject(formData: FormData) {
   return { success: true, id: project._id.toString() };
 }
 
+export async function updateProjectTitle(projectId: string, newTitle: string) {
+  await connectDB();
+  const project = await ProjectModel.findById(projectId);
+  if (!project) return;
+
+  project.title = newTitle;
+  await project.save();
+
+  revalidatePath(`/project/${projectId}`);
+  revalidatePath(`/p/${projectId}`);
+  revalidatePath("/");
+}
+
 // ... (getProject, uploadMedia, updateProjectMedia, addComment, deleteMedia remain unchanged) ...
 
 export async function deleteProject(projectId: string) {
