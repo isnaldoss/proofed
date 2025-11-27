@@ -62,7 +62,46 @@ export async function createProject(formData: FormData) {
   const project = await ProjectModel.create({ title });
 
   revalidatePath("/");
-  redirect(`/project/${project._id.toString()}`);
+  return { success: true, id: project._id.toString() };
+}
+
+// ... (getProject, uploadMedia, updateProjectMedia, addComment, deleteMedia remain unchanged) ...
+
+export async function deleteProject(projectId: string) {
+  try {
+    await connectDB();
+    const project = await ProjectModel.findById(projectId);
+    if (!project) return;
+
+    // Delete from Cloudinary
+    for (const item of project.media) {
+      const publicId = item.url.split("/").slice(-2).join("/").split(".")[0];
+      try {
+        await cloudinary.uploader.destroy(`proofed/${publicId}`, {
+          resource_type: item.type === "video" ? "video" : "image",
+        });
+      } catch (error) {
+        console.error(`Failed to delete from Cloudinary: ${publicId}`, error);
+      }
+    }
+
+    // Delete folder from Cloudinary
+    try {
+      await cloudinary.api.delete_folder(`proofed/${projectId}`);
+    } catch (error) {
+      console.error(
+        `Failed to delete folder from Cloudinary: proofed/${projectId}`,
+        error
+      );
+    }
+
+    await ProjectModel.findByIdAndDelete(projectId);
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting project:", error);
+    throw error;
+  }
 }
 
 export async function getProject(id: string) {
@@ -191,40 +230,53 @@ export async function addComment(
   revalidatePath(`/project/${projectId}`);
 }
 
-export async function deleteProject(projectId: string) {
+export async function deleteComment(
+  projectId: string,
+  mediaId: string,
+  commentId: string
+) {
+  await connectDB();
+  const project = await ProjectModel.findById(projectId);
+  if (!project) return;
+
+  const mediaItem = project.media.id(mediaId);
+  if (mediaItem) {
+    mediaItem.comments.pull(commentId);
+    await project.save();
+  }
+
+  revalidatePath(`/p/${projectId}`);
+  revalidatePath(`/project/${projectId}`);
+}
+
+export async function deleteMedia(projectId: string, mediaId: string) {
   try {
     await connectDB();
     const project = await ProjectModel.findById(projectId);
     if (!project) return;
 
+    // Find the media item
+    const mediaItem = project.media.id(mediaId);
+    if (!mediaItem) return;
+
     // Delete from Cloudinary
-    for (const item of project.media) {
-      const publicId = item.url.split("/").slice(-2).join("/").split(".")[0];
-      try {
-        await cloudinary.uploader.destroy(`proofed/${publicId}`, {
-          resource_type: item.type === "video" ? "video" : "image",
-        });
-      } catch (error) {
-        console.error(`Failed to delete from Cloudinary: ${publicId}`, error);
-      }
-    }
-
-    // Delete folder from Cloudinary
+    const publicId = mediaItem.url.split("/").slice(-2).join("/").split(".")[0];
     try {
-      await cloudinary.api.delete_folder(`proofed/${projectId}`);
+      await cloudinary.uploader.destroy(`proofed/${publicId}`, {
+        resource_type: mediaItem.type === "video" ? "video" : "image",
+      });
     } catch (error) {
-      console.error(
-        `Failed to delete folder from Cloudinary: proofed/${projectId}`,
-        error
-      );
+      console.error(`Failed to delete from Cloudinary: ${publicId}`, error);
     }
 
-    await ProjectModel.findByIdAndDelete(projectId);
+    // Remove from MongoDB
+    project.media.pull(mediaId);
+    await project.save();
+
+    revalidatePath(`/project/${projectId}`);
+    revalidatePath(`/p/${projectId}`);
   } catch (error) {
-    console.error("Error deleting project:", error);
+    console.error("Error deleting media:", error);
     throw error;
   }
-
-  revalidatePath("/");
-  redirect("/");
 }

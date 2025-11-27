@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,8 +34,10 @@ export default function RootLayout({
         <div className="flex-1">
           {children}
         </div>
+        <Toaster />
         <footer className="py-4 text-center text-xs sm:text-sm text-muted-foreground bg-background">
-          Desenvolvido pela <a href="https://barondesk.com.br" target="_blank" rel="noopener noreferrer" className="font-medium hover:text-foreground transition-colors">Barondesk</a>
+         {/* Copy with atual date */}
+         {new Date().getFullYear()} - Proofed - by <a href="https://barondesk.com.br" target="_blank" rel="noopener noreferrer" className="font-medium hover:text-foreground transition-colors">Barondesk</a>
         </footer>
       </body>
     </html>

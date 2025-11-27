@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Project, MediaItem, uploadMedia, updateProjectMedia, deleteProject } from '@/app/actions'
+import { Project, MediaItem, uploadMedia, updateProjectMedia, deleteProject, deleteMedia } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Upload, Link as LinkIcon, ExternalLink, GripVertical, Trash2, ArrowLeft, Loader2 } from 'lucide-react'
+import { Upload, Link as LinkIcon, ExternalLink, GripVertical, Trash2, ArrowLeft, Loader2, X } from 'lucide-react'
+import { toast } from 'sonner'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   DndContext,
   closestCenter,
@@ -25,7 +27,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-function SortableMediaItem({ item }: { item: MediaItem }) {
+function SortableMediaItem({ item, onDelete }: { item: MediaItem; onDelete: (id: string) => void }) {
   const {
     attributes,
     listeners,
@@ -52,6 +54,14 @@ function SortableMediaItem({ item }: { item: MediaItem }) {
           <GripVertical className="h-6 w-6" />
         </button>
       </div>
+
+      <button
+        onClick={() => onDelete(item.id)}
+        className="absolute top-2 right-2 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition-all hover:bg-black/80 hover:scale-110 group-hover:opacity-100"
+        title="Excluir imagem"
+      >
+        <X className="h-4 w-4" />
+      </button>
       
       <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100">
         {item.comments.length} comentários
@@ -64,6 +74,7 @@ export default function ProjectEditor({ project }: { project: Project }) {
   const [media, setMedia] = useState(project.media)
   const [isPending, startTransition] = useTransition()
   const [uploadStatus, setUploadStatus] = useState('')
+  const router = useRouter()
   
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -167,26 +178,63 @@ export default function ProjectEditor({ project }: { project: Project }) {
           await uploadMedia(project.id, formData)
         } catch (error) {
           console.error(`Failed to upload ${file.name}:`, error)
-          alert(`Erro ao enviar ${file.name}. Verifique se o arquivo é menor que 4.5MB.`)
+          toast.error(`Erro ao enviar ${file.name}. Verifique o tamanho do arquivo.`)
         }
       }
       setUploadStatus('Finalizando...')
+      toast.success('Upload concluído!')
       window.location.reload() 
     })
   }
 
   // ... existing copyLink ...
 
+  async function handleDeleteMedia(mediaId: string) {
+    toast('Tem certeza que deseja excluir esta mídia?', {
+      action: {
+        label: 'Excluir',
+        onClick: async () => {
+          try {
+            await deleteMedia(project.id, mediaId)
+            toast.success('Mídia excluída com sucesso')
+            window.location.reload()
+          } catch (error) {
+            toast.error('Erro ao excluir mídia')
+          }
+        }
+      },
+      cancel: {
+        label: 'Cancelar',
+        onClick: () => {},
+      },
+      duration: 5000,
+    })
+  }
+
   async function handleDelete() {
-    if (confirm('Tem certeza que deseja excluir este projeto?')) {
-      setIsDeleting(true)
-      try {
-        await deleteProject(project.id)
-      } catch (error) {
-        setIsDeleting(false)
-        alert('Erro ao excluir projeto')
-      }
-    }
+    toast('Tem certeza que deseja excluir este projeto?', {
+      action: {
+        label: 'Excluir',
+        onClick: async () => {
+          setIsDeleting(true)
+          try {
+            const result = await deleteProject(project.id)
+            if (result?.success) {
+              toast.success('Projeto excluído')
+              router.push('/')
+            }
+          } catch (error) {
+            setIsDeleting(false)
+            toast.error('Erro ao excluir projeto')
+          }
+        }
+      },
+      cancel: {
+        label: 'Cancelar',
+        onClick: () => {},
+      },
+      duration: 5000,
+    })
   }
 
   return (
@@ -273,7 +321,7 @@ export default function ProjectEditor({ project }: { project: Project }) {
         >
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             {media.map((item) => (
-              <SortableMediaItem key={item.id} item={item} />
+              <SortableMediaItem key={item.id} item={item} onDelete={handleDeleteMedia} />
             ))}
           </div>
         </SortableContext>

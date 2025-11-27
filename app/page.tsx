@@ -1,9 +1,10 @@
-import { getProjects, createProject } from "./actions";
+import { getProjects } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import Link from "next/link";
 import { Plus, Folder } from "lucide-react";
+import CreateProjectForm from "./create-project-form";
 
 // Force dynamic rendering (no pre-render at build time)
 export const dynamic = 'force-dynamic';
@@ -21,18 +22,7 @@ export default async function Dashboard() {
         <div className="mb-6 sm:mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold">Seus Projetos</h2>
           
-          <form action={createProject} className="flex flex-col gap-2 sm:flex-row sm:gap-2">
-            <Input 
-              name="title" 
-              placeholder="Novo Projeto..." 
-              className="w-full sm:w-64"
-              required
-            />
-            <Button type="submit" className="cursor-pointer w-full sm:w-auto">
-              <Plus className="mr-2 h-4 w-4" />
-              Criar
-            </Button>
-          </form>
+          <CreateProjectForm />
         </div>
 
         {projects.length === 0 ? (
